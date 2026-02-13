@@ -13,7 +13,7 @@
 
 根据用途的不同，传递协议按有/无状态归类出两种变体：无状态数据传递协议 (stateLess Data Delivery Protocol, LDDP) 对每一个由源服务器发往目标服务器的数据进行签名封装，而有状态数据协议 (Stateful Data Delivery Protocol) 基于信道的连接状态实现可信信道。LDDP 用于服务器不直接相互通信的情况，而 SDDP 则是用于服务器之间直接进行通信的情况。
 
-尽管 SDDP 只需要信道保证有序传输即可使用，但为了设立 SDDP 实现的基准，本协议要求所有实现者必须支持基于 TCP / RFC 9293 传递数据。此外，本协议还提供了一个帮助 Minecraft 服务器复用游戏端口的协议扩展（STARTMFP）。我们建议实现者同时实现 STARTMFP，尽管这并不是必须的。
+尽管 SDDP 只需要信道保证有序传输即可使用，为了设立 SDDP 实现的基准，本协议要求所有实现者必须支持基于 TCP / RFC 9293 传递数据。此外，本协议还提供了一个帮助 Minecraft 服务器复用游戏端口的协议扩展（STARTMFP）。我们建议实现者同时实现 STARTMFP，尽管这并不是必须的。
 
 ## 无状态数据传递协议
 
@@ -88,13 +88,13 @@ LDDP 规定，封包可能包含以下字段（字段类型由 [MessagePack Spec
 所有封包均使用此格式进行封装。其中 `数据` 又根据 `明文封包` 和 `密文封包` 而有区分，详见下文。  
 根据网络情况的不同，封包可能会被信道进行拆分重组甚至丢包重传。因此，实现者应根据 `长度` 从数据流中分割出封包，避免可能存在的数据损坏问题。为了安全考虑，单个封包有效数据（除去 `长度` ）的长度不应超过 5,242,880 个字节 (5MiB)。对于可能过长的封包，请积极在协议设计中采用分段上传的办法。
 
-## 数据类型
+### 数据类型
 
 此小节包含一系列可能在此协议规范中出现的数据类型的名称以及其编解码方式。  
 
 需要注意的是，除了 VarInt 和 VarInt64 之外的所有数据均使用**大端序（Big-Endian）**，即数据的发送顺序总是从最高有效字节开始到最低有效字节结束。
 
-### VarInt 和 VarInt64
+#### VarInt 和 VarInt64
 
 VarInt/VarInt64 为可变长(长)整数的缩写。作为 Minecraft 内部使用的一种数据类型，它们类似于 [Protocol Buffer](https://protobuf.dev/programming-guides/encoding/#varints) 中的 Base 128 Varints。本协议中描述的 VarInt 为 Prrotocol Buffer 中的 `int32` / `int64` (for VarInt64) 变种，并非使用 ZigZag 编码的 `sint32` / `sint64`.
 
@@ -102,13 +102,13 @@ VarInt/VarInt64 为可变长(长)整数的缩写。作为 Minecraft 内部使用
 
 具体的编码细节可以查看 [Minecrat Wiki 上的对应章节](https://minecraft.wiki/w/Java_Edition_protocol/Packets?oldid=3410741#VarInt_and_VarInt64)
 
-### ByteArray
+#### ByteArray
 
 ByteArray 指字节数组，它的长度只能从上下文中获取。
 
 在其后标注数字表示此为固定长度的字节数组，如 `ByteArray (8)` 表示这是一个 8 字节的字节数组。
 
-### Prefixed ByteArray
+#### Prefixed ByteArray
 
 Prefixed ByteArray 指包含长度前缀的 ByteArray.
 
@@ -116,23 +116,23 @@ Prefixed ByteArray 指包含长度前缀的 ByteArray.
 | -- | -- |
 | VarInt | ByteArray |
 
-### Unsigned Short
+#### Unsigned Short
 
 Unsigned Short 指无符号的 16 位整数
 
-### String
-https://minecraft.wiki/w/Java_Edition_protocol/Packets?oldid=3410741#VarInt_and_VarInt64
+#### String
+https://minecraft.wiki/w/Java_Edition_protocol/Packets?oldid=3410741#VarInt_and_VarInt64  
 储存标准 UTF-8（不使用 Java 变种） 格式字符串的 Prefixed ByteArray。
 
 | 长度 | 数据 (UTF-8) |
 | -- | -- |
 | VarInt | ByteArray |
 
-### Int32/Int64
+#### Int32/Int64
 
 指有符号（补码）的 32/64 位整数
 
-### Bool
+#### Bool
 
 指布尔值。布尔值使用单字节 0 表示 false, 1 表示 true.
 
@@ -148,9 +148,9 @@ https://minecraft.wiki/w/Java_Edition_protocol/Packets?oldid=3410741#VarInt_and_
 
 在双方的临时公钥均已送达后，即可通过 ECDH 计算共享秘密 `S = X25519(k_C/S, K_S/C)` (参见 [RFC 7748 Section 6.1](https://www.rfc-editor.org/rfc/rfc7748.html#section-6.1) )。随后，使用 `S` 计算出最终加密参数：
 
-> PRK = HKDF-Extract(0, shared_secret)
-> client_AES_key, client_IV = HKDF-Expand(PRK, b"sddp client")
-> server_AES_key, server_IV = HKDF-Expand(PRK, b"sddp server")
+> PRK = HKDF-Extract(0, shared_secret)  
+> client_AES_key, client_IV = HKDF-Expand(PRK, b"sddp client")  
+> server_AES_key, server_IV = HKDF-Expand(PRK, b"sddp server")  
 
 HKDF-Extract 和 HKDF-Expand 详见 [RFC 5869 Section 2.2](https://datatracker.ietf.org/doc/html/rfc5869#section-2.2)
 
@@ -161,7 +161,7 @@ HKDF-Extract 和 HKDF-Expand 详见 [RFC 5869 Section 2.2](https://datatracker.i
 
 在握手协议结束后，信道两端使用 `PeerPayload (0x03)` 进行数据传递。关于具体的传输细节，请参考下文中对应封包的说明。
 
-## 封包类型参考
+### 封包类型参考
 
 有状态数据传递协议规定了一组封包，大体分类如下：
 
@@ -181,7 +181,7 @@ HKDF-Extract 和 HKDF-Expand 详见 [RFC 5869 Section 2.2](https://datatracker.i
 
 其中 `AES_key`, `IV` 的计算方式详见协议流程。SDDP 为了防止 IV 碰撞导出了两套 AES 的参数。因此为了解密来自服务端的流量，客户端应该使用 `server_IV` 和 `server_AES_key`，服务端同理。至于封包的加密方式也不再赘述。
 
-### PeerAuthHello (0x00)
+#### PeerAuthHello (0x00)
 
 此封包设计用于有状态数据传递协议，且必须依照明文封包格式封装。
 
@@ -192,7 +192,9 @@ HKDF-Extract 和 HKDF-Expand 详见 [RFC 5869 Section 2.2](https://datatracker.i
 
 SDDP 使用 Curve25519 进行密钥协商（ECDH）。因此在发送 PeerAuthHello 前，发送者应该在本地生成 32 位随机字节 (称作: `a`) 作为 x25519 使用的私钥，并通过 [RFC 7748 中提到的方法](https://www.rfc-editor.org/rfc/rfc7748.html#section-5) 计算公钥 `A=X25519(a, 9)`。
 
-`签名` 使用 [RFC 8032 Section 5.1.6](https://www.rfc-editor.org/rfc/rfc8032.html#section-5.1.6) 中描述的签名办法计算，其中参数为：发送者的 ed25519 私钥 以及 签名数据 `M = 目标公钥 || 本地临时公钥 || 当前 UNIX 时间`
+`签名` 使用 [RFC 8032 Section 5.1.6](https://www.rfc-editor.org/rfc/rfc8032.html#section-5.1.6) 中描述的签名办法计算，
+
+其中参数为：发送者的 ed25519 私钥 以及 签名数据 `M = 目标公钥 || 本地临时公钥 || 当前 UNIX 时间`
 
 任意一端接收到 `PeerAuthHello` 后，应依据以下办法对签名进行检查：
 
@@ -201,7 +203,7 @@ SDDP 使用 Curve25519 进行密钥协商（ECDH）。因此在发送 PeerAuthHe
 
 否则拒绝承认封包的有效性并断开连接 (`PeerDisconnect (0x05)`)。
 
-### PeerPing (0x01)
+#### PeerPing (0x01)
 
 此封包设计用于有状态数据传递协议，且必须依照密文封包格式封装。
 
@@ -209,13 +211,13 @@ SDDP 使用 Curve25519 进行密钥协商（ECDH）。因此在发送 PeerAuthHe
 
 在收到 `PeerPing` 时，实现必须往对端发送 `PeerPong` 表示响应。
 
-### PeerPong (0x02)
+#### PeerPong (0x02)
 
 此封包设计用于有状态数据传递协议，且必须依照密文封包格式封装。
 
 没有数据。  
 
-### PeerPayload (0x03)
+#### PeerPayload (0x03)
 
 此封包设计用于有状态数据传递协议，且必须依照密文封包格式封装。
 
@@ -228,7 +230,7 @@ SDDP 使用 Curve25519 进行密钥协商（ECDH）。因此在发送 PeerAuthHe
 
 如果此封包 `事务 ID` 不为 0, 则在封包处理完毕后必须回应 `PeerAcknowledge (0x04)`。
 
-### PeerAcknowledge (0x04)
+#### PeerAcknowledge (0x04)
 
 此封包设计用于有状态数据传递协议，且必须依照密文封包格式封装。
 
@@ -238,7 +240,7 @@ SDDP 使用 Curve25519 进行密钥协商（ECDH）。因此在发送 PeerAuthHe
 
 用于表示某一封包已被处理。其中，事务 ID 来自 `PeerPayload (0x03)`, 而错误信息在没有发生错误时应该留空。
 
-### PeerDisconnect (0x05)
+#### PeerDisconnect (0x05)
 
 此封包设计用于有状态数据传递协议，且必须依照密文封包格式封装。
 
@@ -249,3 +251,11 @@ SDDP 使用 Curve25519 进行密钥协商（ECDH）。因此在发送 PeerAuthHe
 此包发送后应该立即断开连接。其中，当 `reason` 为 1 时表示重新协商密钥，此时被连接的对端（服务端）需等待客户端重新连接即可。
 
 为了确保安全期间，我们建议实现者在包序号溢出（即恢复到 1 时）重新创建连接。
+
+## SDDP 协议扩展：STARTMFP
+
+为了贴合 Minecraft 服务器的情景，本扩展协议提供了基于 【Minecraft: Java Edition 协议](https://minecraft.wiki/w/Java_Edition_protocol/Packets) 的端口复用方案。
+
+在 SDDP 开始之前，向目标端口发送 Intent 为 127 [ServerboundHandshake (0x00)](https://minecraft.wiki/w/Java_Edition_protocol/Packets?oldid=3410741#Handshake) 后即可直接开始 SDDP 流程。
+
+实现者应该提供选项以供在 STARTMFP 和直接 SDDP 之间选择。此外，STARTMFP 基于 `ServerboundHandshake` 的封包格式，并不利于 Minecraft 以外的第三方程序使用。
