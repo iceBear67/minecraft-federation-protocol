@@ -6,7 +6,7 @@
 
 文档列表：
  - [服务器间数据传递协议](./INTERCONNECTION.md)
- - [玩家身份认证协议 (WIP)](./PLAYER_IDENTITY.md)
+ - [玩家身份认证协议](./PLAYER_IDENTITY.md)
  - [威胁模型（WIP）](./THREAT_MODEL.md)
 
 # 定义
