@@ -1,6 +1,6 @@
 # 玩家身份验证协议
 
-玩家身份验证协议 (Player Identity Protocol, PIP) 基于 LDDP 实现去中心化的玩家身份验证。在实施此协议的联邦服务器中，玩家的身份总是由其携带的 Redirecion Token 决定，而无需基于 Yggdrasil 或密码为所有联邦服务器设置重复的验证。
+玩家身份验证协议 (Player Identity Protocol, PIP) 基于 [Offline Delivery Protocol, ODP](/INTERCONNECTION.md) 实现去中心化的玩家身份验证。在实施此协议的联邦服务器中，玩家的身份总是由其携带的 Redirecion Token (RT) 决定，而无需基于 Yggdrasil 或密码为所有联邦服务器设置重复的验证。
 
 ## 前置条件
 
@@ -13,19 +13,19 @@
 
 ## 协议概览
 
-Redirection Token (RT) 是一种用于鉴定玩家身份的凭据，它同时还提供了对 RT 之外一同携带的数据的扩展验证功能。PIP 规定了如何使用 LDDP 实现 RT 以及如何通过 Minecraft 客户端的 cookies 功能储存 RT 以及如何对附加数据实现验证。尽管 PIP 协议要求使用 cookies 功能，实现者也可以在其他类似设施的基础上（如：自定义 Mod ）实现 PIP。
+Redirection Token (RT) 是一种用于鉴定玩家身份的凭据，它同时还提供了对 RT 之外一同携带的数据的扩展验证功能。PIP 规定了如何使用 ODP 实现 RT 以及如何通过 Minecraft 客户端的 cookies 功能储存 RT 以及如何对附加数据实现验证。尽管 PIP 协议要求使用 cookies 功能，实现者也可以在其他类似设施的基础上（如：自定义 Mod ）实现 PIP。
 
 此外，PIP 还规定了对于接收 RT 的回执机制。回执机制可以让 RT 的签发者回收/清理玩家对应的资源，以免发生状态脱同步。
 
 ## Redirection Token (RT)
 
-Redirection Token 是基于 LDDP 实现的票据。除 LDDP 中提到的各项字段外，RT 额外添加以下内容（字段类型由 [MessagePack Spec](https://github.com/msgpack/msgpack/blob/master/spec.md#bin-format-family) 规定）：
+Redirection Token 是基于 ODP 实现的票据。除 ODP 中提到的各项字段外，RT 额外添加以下内容（字段类型由 [MessagePack Spec](https://github.com/msgpack/msgpack/blob/master/spec.md#bin-format-family) 规定）：
 
 | 名称 | 类型 | 可缺省 | 备注 |
 | -- | -- | -- | -- |
-| action | str 8 | | LDDP 中的 action 必须固定为 `redirect` |
+| action | str 8 | | ODP 中的 action 必须固定为 `redirect` |
 | reuse | bool | | 固定为 `false` |
-| subject | bin 8 | | LDDP 中的 subject 必须为该 RT 对应玩家的 UUID |
+| subject | bin 8 | | ODP 中的 subject 必须为该 RT 对应玩家的 UUID |
 | data | PlayerProfile | | 见下文 |
 
 其中， `PlayerProfile` 包含以下字段：
@@ -53,7 +53,7 @@ Redirection Token 是基于 LDDP 实现的票据。除 LDDP 中提到的各项�
 
 实现在使用 RT 之前，应按照以下步骤对 RT 进行检查：
 
-1. 按照 LDDP 中提到的办法检查。
+1. 按照 ODP 中提到的办法检查。
 2. 检查 `target` 是否是实现自己的公钥以防挪用。
 
 若实现需要使用 RT 携带的附加数据，对于每一个被用到的扩展都需要按照以下步骤检查 `ExtensionSignature`:
@@ -63,7 +63,7 @@ Redirection Token 是基于 LDDP 实现的票据。除 LDDP 中提到的各项�
 
 ## Cookies 信道
 
-为了通过玩家在服务器之间传递 LDDP，我们使用客户端的 [Cookie Store/Request](https://minecraft.wiki/w/Java_Edition_protocol/Packets?oldid=3410741#Cookie_Request_(configuration) 功能来存放数据。然而，Cookie 的大小上限仅有 5 KiB, 这使得我们需要规定切割数据的办法以使用 Cookie，本信道协议即用于解决此问题。
+为了通过玩家在服务器之间传递 ODP，我们使用客户端的 [Cookie Store/Request](https://minecraft.wiki/w/Java_Edition_protocol/Packets?oldid=3410741#Cookie_Request_(configuration) 功能来存放数据。然而，Cookie 的大小上限仅有 5 KiB, 这使得我们需要规定切割数据的办法以使用 Cookie，本信道协议即用于解决此问题。
 
 ### Cookie 格式规范
 
@@ -103,12 +103,12 @@ Redirection Token 是基于 LDDP 实现的票据。除 LDDP 中提到的各项�
 
 ## 回执
 
-RT 的签发者可以目标服务器获得回执以确认 RT 被核销/玩家到达目标服务器。回执使用 SDDP 实现。
+RT 的签发者可以目标服务器获得回执以确认 RT 被核销/玩家到达目标服务器。回执使用 RTDP 实现。
 
 ### 协议流程
 
  - 目标服务器接收到并校验了有效 RT
- - 目标服务器根据 RT 中规定的来源向来源服务器发起 `SDDP` 连接。
+ - 目标服务器根据 RT 中规定的来源向来源服务器发起 `RTDP` 连接。
  - 目标服务器发送 `PlayerRedirectionArrived` 表示玩家已经抵达。
  - 目标服务器等待对应的 `PeerAcknowledge (0x04)`, 确定没有错误信息。
  - 目标服务器发送相同事务 Id 的 `PeerAcknowledge (0x04)` 表示已经收到回复，随后放行玩家。
@@ -133,7 +133,7 @@ RT 的签发者可以目标服务器获得回执以确认 RT 被核销/玩家到
 
 | action | subject | 事务 ID | 数据 |
 | -- | -- | -- | -- |
-| `arrive` | 目标玩家的 UUID | 一个随机数 | RT 作为 LDDP 的 `signature` (64字节) |
+| `arrive` | 目标玩家的 UUID | 一个随机数 | RT 作为 ODP 的 `signature` (64字节) |
 
 ## 建议
 

@@ -11,23 +11,23 @@
 
 ## 协议概述
 
-根据用途的不同，传递协议按有/无状态归类出两种变体：无状态数据传递协议 (stateLess Data Delivery Protocol, LDDP) 对每一个由源服务器发往目标服务器的数据进行签名封装，而有状态数据协议 (Stateful Data Delivery Protocol) 基于信道的连接状态实现可信信道。LDDP 用于服务器不直接相互通信的情况，而 SDDP 则是用于服务器之间直接进行通信的情况。
+根据用途的不同，传递协议归类出两种变体：离线传递协议 (Offline Delivery Protocol, ODP) 对每一个由源服务器发往目标服务器的数据进行签名封装，而实时传递协议 (RealTime Delivery Protocol) 基于信道的连接状态实现可信信道。ODP 用于服务器不直接相互通信的情况，而 RTDP 则是用于服务器之间直接进行通信的情况。
 
-尽管 SDDP 只需要信道保证有序传输即可使用，为了设立 SDDP 实现的基准，本协议要求所有实现者必须支持基于 TCP / RFC 9293 传递数据。此外，本协议还提供了一个帮助 Minecraft 服务器复用游戏端口的协议扩展（STARTMFP）。我们建议实现者同时实现 STARTMFP，尽管这并不是必须的。
+尽管 RTDP 只需要信道保证有序传输即可使用，但为了设立 RTDP 实现的基准，本协议要求所有实现者必须支持基于 TCP / RFC 9293 传递数据。此外，本协议还提供了一个帮助 Minecraft 服务器复用游戏端口的协议扩展（STARTRTD）。我们建议实现者同时实现 STARTRTD，尽管这并不是必须的。
 
-## 无状态数据传递协议
+## 离线传递协议
 
-无状态数据传递协议 (stateLess Data Delivery Protocol, LDDP) 对每一个由源服务器发往目标服务器的数据 (封包) 进行签名封装。它适用于服务器间间接通信或一次性报文的情况。LDDP 仅规定了数据封装的格式而并非传输的办法。  
+离线传递协议 (Offline Delivery Protocol, ODP) 对每一个由源服务器发往目标服务器的数据 (封包) 进行签名封装。它适用于服务器间间接通信或一次性报文的情况。ODP 仅规定了数据封装的格式而并非传输的办法。  
 
-LDDP 可以用在所有用于需要鉴权或是传递实时性不高的数据的地方，比如玩家的票据，回执等。
+ODP 可以用在所有用于需要鉴权或是传递实时性不高的数据的地方，比如玩家的票据，回执等。
 
 ### 数据封装
 
-LDDP 中传递数据的基本单位为封包。LDDP 完全使用 [MessagePack](https://msgpack.org/) 封装数据。MessagePack (MsgPack) 是一种相比 JSON 更紧凑且无需预先约定格式的二进制编码格式。考虑到 LDDP 的用途，无需编码的特点有助于 LDDP 在未来继续扩展，而紧凑的字节序列化也允许 LDDP 高效地存储从 Minecraft 中导出的 NBT 数据。
+ODP 中传递数据的基本单位为封包。ODP 完全使用 [MessagePack](https://msgpack.org/) 封装数据。MessagePack (MsgPack) 是一种相比 JSON 更紧凑且无需预先约定格式的二进制编码格式。考虑到 ODP 的用途，无需编码的特点有助于 ODP 在未来继续扩展，而紧凑的字节序列化也允许 ODP 高效地存储从 Minecraft 中导出的 NBT 数据。
 
 ### 约定字段
 
-LDDP 规定，封包可能包含以下字段（字段类型由 [MessagePack Spec](https://github.com/msgpack/msgpack/blob/master/spec.md#bin-format-family) 规定）：
+ODP 规定，封包可能包含以下字段（字段类型由 [MessagePack Spec](https://github.com/msgpack/msgpack/blob/master/spec.md#bin-format-family) 规定）：
 
 | 名称 | 类型 | 可缺省 | 备注 |
 | -- | -- | -- | -- |
@@ -54,7 +54,7 @@ LDDP 规定，封包可能包含以下字段（字段类型由 [MessagePack Spec
 
 ### 数据校验
 
-在使用封包中的数据前，LDDP 的实现者必须依照以下规则检查其合法性：
+在使用封包中的数据前，ODP 的实现者必须依照以下规则检查其合法性：
 
 1. `version` 为 1
 2. 检查 `time < until` 且现在的时间戳 `NOW` 满足 `time < NOW < until`。
@@ -65,9 +65,9 @@ LDDP 规定，封包可能包含以下字段（字段类型由 [MessagePack Spec
 
 如果有任意一条不满足，拒绝承认其有效性。对于被记录的 `signature` ，记录的销毁时间至少应该在 `until` 之后，且此记录必须能够存活在服务器重启之间存活（持久化）。
 
-## 有状态数据传递协议
+## 实时传递协议
 
-有状态数据传递协议在信道上进行身份验证，随后将通信对端的身份与信道连接绑定来避免频繁签名的开销。它适用于服务器之间通信条件良好或对实时性要求较高的情况。
+实时传递协议在信道上进行身份验证，随后将通信对端的身份与信道连接绑定来避免频繁签名的开销。它适用于服务器之间通信条件良好或对实时性要求较高的情况。
 
 此子协议在 「前置条件」 下额外附加几条条件：
 
@@ -138,7 +138,7 @@ https://minecraft.wiki/w/Java_Edition_protocol/Packets?oldid=3410741#VarInt_and_
 
 ### 协议流程
 
-为了实现不可抵赖性以及在不安全信道上可靠地传递数据，SDDP 强制使用加密。尽管数据传递协议并没有明确的客户端-服务端角色，我们仍需要使用客户端 C 与服务端 S 来分别指代信道中的发起连接和接受连接的两端。在实践中，二者并无实际区分。
+为了实现不可抵赖性以及在不安全信道上可靠地传递数据，RTDP 强制使用加密。尽管数据传递协议并没有明确的客户端-服务端角色，我们仍需要使用客户端 C 与服务端 S 来分别指代信道中的发起连接和接受连接的两端。在实践中，二者并无实际区分。
 
 若欲通信的两方之间已经从任意一方开始建立了可信信道，则无需再次建立信道，直接使用已建立的信道通信即可。否则，依照如下的步骤进行：
 
@@ -163,7 +163,7 @@ HKDF-Extract 和 HKDF-Expand 详见 [RFC 5869 Section 2.2](https://datatracker.i
 
 ### 封包类型参考
 
-有状态数据传递协议规定了一组封包，大体分类如下：
+实时传递协议规定了一组封包，大体分类如下：
 
 - 明文封包：封包的 `数据` 段没有额外封装
 - 密文封包：密文封包只在加密后发送，并且遵循如下的封装规定：
@@ -179,18 +179,18 @@ HKDF-Extract 和 HKDF-Expand 详见 [RFC 5869 Section 2.2](https://datatracker.i
 1. 若接收到的封包包序号 `N` 不满足 `N == (R+1) % (2^31 - 1)` 则拒绝封包并断开连接 (`PeerDisconnect (0x05)`)。  
 2. 尝试解密密文 `M`, `M = AES_GCM_Decrypt(AES_key, IV, 密文, AEAD Tag, 包序号)`。若解密或 AEAD 校验失败，则断开连接 (`PeerDisconnect (0x05)`)。
 
-其中 `AES_key`, `IV` 的计算方式详见协议流程。SDDP 为了防止 IV 碰撞导出了两套 AES 的参数。因此为了解密来自服务端的流量，客户端应该使用 `server_IV` 和 `server_AES_key`，服务端同理。至于封包的加密方式也不再赘述。
+其中 `AES_key`, `IV` 的计算方式详见协议流程。RTDP 为了防止 IV 碰撞导出了两套 AES 的参数。因此为了解密来自服务端的流量，客户端应该使用 `server_IV` 和 `server_AES_key`，服务端同理。至于封包的加密方式也不再赘述。
 
 #### PeerAuthHello (0x00)
 
-此封包设计用于有状态数据传递协议，且必须依照明文封包格式封装。
+此封包设计用于实时传递协议，且必须依照明文封包格式封装。
 
 | 本地公钥 | 目标公钥 | 本地临时公钥 | 当前 UNIX 时间 | 签名 |
 | - | - | - | - | - |
 | ByteArray (32) | ByteArray (32) | ByteArray(32) | Int64 | ByteArray (64) |
 | | | | 必须是正整数，否则断开连接 (`PeerDisconnect (0x05)`) |
 
-SDDP 使用 Curve25519 进行密钥协商（ECDH）。因此在发送 PeerAuthHello 前，发送者应该在本地生成 32 位随机字节 (称作: `a`) 作为 x25519 使用的私钥，并通过 [RFC 7748 中提到的方法](https://www.rfc-editor.org/rfc/rfc7748.html#section-5) 计算公钥 `A=X25519(a, 9)`。
+RTDP 使用 Curve25519 进行密钥协商（ECDH）。因此在发送 PeerAuthHello 前，发送者应该在本地生成 32 位随机字节 (称作: `a`) 作为 x25519 使用的私钥，并通过 [RFC 7748 中提到的方法](https://www.rfc-editor.org/rfc/rfc7748.html#section-5) 计算公钥 `A=X25519(a, 9)`。
 
 `签名` 使用 [RFC 8032 Section 5.1.6](https://www.rfc-editor.org/rfc/rfc8032.html#section-5.1.6) 中描述的签名办法计算，
 
@@ -205,7 +205,7 @@ SDDP 使用 Curve25519 进行密钥协商（ECDH）。因此在发送 PeerAuthHe
 
 #### PeerPing (0x01)
 
-此封包设计用于有状态数据传递协议，且必须依照密文封包格式封装。
+此封包设计用于实时传递协议，且必须依照密文封包格式封装。
 
 没有数据。  
 
@@ -213,26 +213,26 @@ SDDP 使用 Curve25519 进行密钥协商（ECDH）。因此在发送 PeerAuthHe
 
 #### PeerPong (0x02)
 
-此封包设计用于有状态数据传递协议，且必须依照密文封包格式封装。
+此封包设计用于实时传递协议，且必须依照密文封包格式封装。
 
 没有数据。  
 
 #### PeerPayload (0x03)
 
-此封包设计用于有状态数据传递协议，且必须依照密文封包格式封装。
+此封包设计用于实时传递协议，且必须依照密文封包格式封装。
 
 | action | subject | 事务 ID | 数据 |
 | -- | -- | -- | -- |
 | String | Prefixed ByteArray | VarInt | Prefixed ByteArray |
 | 动作 | 此动作关联的主体，如玩家 UUID | |
 
-`action` 和 `subject` 意义与 LDDP 中的一致。实现端应该对 LDDP 和 SDDP 中的 `action` 有感知，不建议混淆 LDDP 和 SDDP 的处理（除非设计使然）。
+`action` 和 `subject` 意义与 ODP 中的一致。实现端应该对 ODP 和 RTDP 中的 `action` 有感知，不建议混淆 ODP 和 RTDP 的处理（除非设计使然）。
 
 如果此封包 `事务 ID` 不为 0, 则在封包处理完毕后必须回应 `PeerAcknowledge (0x04)`。
 
 #### PeerAcknowledge (0x04)
 
-此封包设计用于有状态数据传递协议，且必须依照密文封包格式封装。
+此封包设计用于实时传递协议，且必须依照密文封包格式封装。
 
 | 事务 ID | 错误信息 |
 | -- | -- |
@@ -242,7 +242,7 @@ SDDP 使用 Curve25519 进行密钥协商（ECDH）。因此在发送 PeerAuthHe
 
 #### PeerDisconnect (0x05)
 
-此封包设计用于有状态数据传递协议，且必须依照密文封包格式封装。
+此封包设计用于实时传递协议，且必须依照密文封包格式封装。
 
 | reason | message |
 | -- | -- |
@@ -252,10 +252,10 @@ SDDP 使用 Curve25519 进行密钥协商（ECDH）。因此在发送 PeerAuthHe
 
 为了确保安全期间，我们建议实现者在包序号溢出（即恢复到 1 时）重新创建连接。
 
-## SDDP 协议扩展：STARTMFP
+## RTDP 协议扩展：STARTRTD
 
 为了贴合 Minecraft 服务器的情景，本扩展协议提供了基于 【Minecraft: Java Edition 协议](https://minecraft.wiki/w/Java_Edition_protocol/Packets) 的端口复用方案。
 
-在 SDDP 开始之前，向目标端口发送 Intent 为 127 [ServerboundHandshake (0x00)](https://minecraft.wiki/w/Java_Edition_protocol/Packets?oldid=3410741#Handshake) 后即可直接开始 SDDP 流程。
+在 RTDP 开始之前，向目标端口发送 Intent 为 127 [ServerboundHandshake (0x00)](https://minecraft.wiki/w/Java_Edition_protocol/Packets?oldid=3410741#Handshake) 后即可直接开始 RTDP 流程。
 
-实现者应该提供选项以供在 STARTMFP 和直接 SDDP 之间选择。此外，STARTMFP 基于 `ServerboundHandshake` 的封包格式，并不利于 Minecraft 以外的第三方程序使用。
+实现者应该提供选项以供在 STARTRTD 和直接 RTDP 之间选择。此外，STARTRTD 基于 `ServerboundHandshake` 的封包格式，并不利于 Minecraft 以外的第三方程序使用。
