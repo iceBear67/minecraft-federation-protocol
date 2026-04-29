@@ -36,13 +36,12 @@ ODP 规定，封包可能包含以下字段（字段类型由 [MessagePack Spec]
 | target | bin 8 |  | 此封包发送目标的公钥 |
 | time | uint 64 |  | 此封包的签发时间（UNIX时间戳，秒） |
 | until | uint 64 |  | 此封包的过期时间 （UNIX时间戳，秒）|
-| reuse | bool |  | 此封包是否可以被重复核验 |
 | action | str 8 |  | 此封包的用途 |
 | subject | bin 8 | ✔ | 此签名所属的对象。通常为玩家的 UUID |
 | data | bin 32 | ✔ | action 所对应的数据 |
 | signature | bin 8 |  | 此封包的签名 |
 
-`signature` 使用 [RFC 8032 Section 5.1.6](https://www.rfc-editor.org/rfc/rfc8032.html#section-5.1.6) 中描述的签名办法计算，其中参数为：发送者的 ed25519 私钥 以及 签名数据 `M = version || target || time || until || reuse || action || subject || SHA3-224(data)`
+`signature` 使用 [RFC 8032 Section 5.1.6](https://www.rfc-editor.org/rfc/rfc8032.html#section-5.1.6) 中描述的签名办法计算，其中参数为：发送者的 ed25519 私钥 以及 签名数据 `M = version || target || time || until || action || subject || SHA3-224(data)`
 
 `||` 表示字节数组的拼接。签名数据中的序列化规则如下：
 
@@ -61,7 +60,6 @@ ODP 规定，封包可能包含以下字段（字段类型由 [MessagePack Spec]
 3. 所有不可缺省字段均存在
 4. 确定 `issuer` 是已知公钥列表中的一员，即可以根据 `issuer` 关联到对应被授权联邦服务器。
 5. 计算签名数据 `M` 并使用封包中的公钥 `issuer` 检验该签名的合法性。
-6. 若 `reuse` 为 false 则检查 `signature` 是否已经被使用过。若没有被使用过，则记录该 signature；否则封包无效。
 
 如果有任意一条不满足，拒绝承认其有效性。对于被记录的 `signature` ，记录的销毁时间至少应该在 `until` 之后，且此记录必须能够存活在服务器重启之间存活（持久化）。
 

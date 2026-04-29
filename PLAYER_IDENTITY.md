@@ -13,7 +13,7 @@
 
 ## 协议概览
 
-Redirection Token (RT) 是一种用于鉴定玩家身份的凭据，它同时还提供了对 RT 之外一同携带的数据的扩展验证功能。PIP 规定了如何使用 ODP 实现 RT 以及如何通过 Minecraft 客户端的 cookies 功能储存 RT 以及如何对附加数据实现验证。尽管 PIP 协议要求使用 cookies 功能，实现者也可以在其他类似设施的基础上（如：自定义 Mod ）实现 PIP。
+Redirection Token (RT) 是一种用于鉴定玩家身份的凭据，它同时还提供了对 RT 之外一同携带的数据的扩展验证功能。PIP 规定了如何使用 ODP 实现 RT 以及如何通过 Minecraft 客户端的 cookies 功能储存 RT 以及如何对附加数据实现验证。尽管 PIP 要求使用 cookies 功能，实现者也可以在其他类似设施的基础上（如：自定义 Mod ）实现 PIP。
 
 此外，PIP 还规定了对于接收 RT 的回执机制。回执机制可以让 RT 的签发者回收/清理玩家对应的资源，以免发生状态脱同步。
 
@@ -24,7 +24,6 @@ Redirection Token 是基于 ODP 实现的票据。除 ODP 中提到的各项字�
 | 名称 | 类型 | 可缺省 | 备注 |
 | -- | -- | -- | -- |
 | action | str 8 | | ODP 中的 action 必须固定为 `redirect` |
-| reuse | bool | | 固定为 `false` |
 | subject | bin 8 | | ODP 中的 subject 必须为该 RT 对应玩家的 UUID |
 | data | PlayerProfile | | 见下文 |
 
@@ -97,7 +96,7 @@ Redirection Token 是基于 ODP 实现的票据。除 ODP 中提到的各项字�
 3. 检查客户端返回的 Cookie 的魔数是否为 `CA AC`
     - 如果是，则使用 `$id-$i` 继续读取每个数据包中除去魔数之外的前 `5118` 字节，直到魔数为 CA FE 为止。其中 `i` 是从 1 开始的自增整数。  
 
-实现在读取分段时，应注意已读取的数据总量（除去魔数，包含填充）一定等于从上下文中获得的数据总量大小（如 `ExtensionSignature` 中规定的 `size`）。若没有上下文规定大小，则上限为 524288 Bytes (0.5M)。
+实现在读取分段时，应注意逻辑上读取的数据总量一定等于从上下文中获得的数据总量（除去魔数，包含填充）大小（如 `ExtensionSignature` 中规定的 `size`）。若没有上下文规定大小，则上限为 524288 Bytes (0.5M)。
 
 我们建议实现者在 Configuration Phase 进行 Cookie 的查询以及运行相关逻辑。这是因为 Cookie 的核验与后文提到的回执系统实施较为繁琐，可能会花费一定时间。而客户端在进入 Configuration Phase 时已经可以接受心跳包防止掉线，且在 Configuration Phase 下玩家尚未正式进入服务器，可以给可能的数据错误/源服务器错误预留出空间。
 
