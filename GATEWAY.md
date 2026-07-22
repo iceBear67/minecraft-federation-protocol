@@ -134,7 +134,7 @@ Encryption Request 的结构如下：
 
 | 魔数 | 联邦服务器公钥 | 签名数据 |
 | -- | -- | -- |
-| Int | Byte Array (32) | Prefixed ByteArray |
+| Int32 | Byte Array (32) | Prefixed ByteArray |
 | 固定为 `18108736` | 连接目标联邦服务器的公钥 | 联邦服务器私钥对 `sk1` 的签名数据 |
 
 2. 如果客户端 Mod 没有在经过验证网关时收到 `mfp:gateway_server_keys`, 则就此结束。
