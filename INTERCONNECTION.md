@@ -153,6 +153,12 @@ https://minecraft.wiki/w/Java_Edition_protocol/Packets?oldid=3410741#VarInt_and_
 
 HKDF-Extract 和 HKDF-Expand 详见 [RFC 5869 Section 2.2](https://datatracker.ietf.org/doc/html/rfc5869#section-2.2)。每个方向各导出 40 字节：前 32 字节为 AES-256 密钥，后 8 字节为该方向的 IV 前缀（`IV_prefix`）。
 
+为避免歧义，此处明确 HKDF 的以下参数（实现之间必须保持一致）：
+
+- HKDF 使用的哈希函数固定为 **SHA-256**（因此 HashLen = 32 字节）。
+- `salt=0` 表示使用长度为 0 的 salt，即 RFC 5869 中「未提供 salt」的情形，等价于 HashLen（32）个零字节。
+- `b"rdp client"` 与 `b"rdp server"` 为 HKDF-Expand 的 `info` 参数，取其 ASCII 字节序列，不包含结尾的 NUL。
+
 密文封包使用 **AES-256-GCM**，AEAD Tag 固定为 16 字节。每个密文封包的 12 字节 nonce 由「对应方向的 `IV_prefix`（8 字节）」拼接「该封包的包序号（4 字节，大端）」构成，即 `nonce = IV_prefix || seq(Int32, 大端)`。由于包序号逐包递增，nonce 在同一密钥下不会复用。本协议不使用 AAD。
 
 随后，双方可以开始发送密文封包（见下文）。
