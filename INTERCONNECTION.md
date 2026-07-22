@@ -7,7 +7,7 @@
 
 本协议基于以下前提：
 
-- 所有联邦服务器各自持有 32 位的 ed25519 私钥，且所有从此私钥派生的公钥对其他联邦服务器均已知。
+- 所有联邦服务器各自持有 32 字节的 ed25519 私钥，且所有从此私钥派生的公钥对其他联邦服务器均已知。
 
 ## 协议概述
 
@@ -41,15 +41,15 @@ ODP 规定，封包可能包含以下字段（字段类型由 [MessagePack Spec]
 | data | bin 32 | ✔ | action 所对应的数据 |
 | signature | bin 8 |  | 此封包的签名 |
 
-`signature` 使用 [RFC 8032 Section 5.1.6](https://www.rfc-editor.org/rfc/rfc8032.html#section-5.1.6) 中描述的签名办法计算，其中参数为：发送者的 ed25519 私钥 以及 签名数据 `M = version || target || time || until || action || subject || SHA3-224(data)`
+`signature` 使用 [RFC 8032 Section 5.1.6](https://www.rfc-editor.org/rfc/rfc8032.html#section-5.1.6) 中描述的签名办法计算，其中参数为：发送者的 ed25519 私钥 以及 签名数据 `M = version || len(target) || target || time || until || len(action) || action || len(subject) || subject || SHA3-224(data)`
 
-`||` 表示字节数组的拼接。签名数据中的序列化规则如下：
+`||` 表示字节数组的拼接，`len(x)` 表示 `x` 的字节长度的 VarInt 编码。签名数据中的序列化规则如下：
 
  - 数字类型均采用大端序。
- - `uint8` 使用一个字节。
+ - `uint8`（version）使用一个字节；`uint64`（time / until）使用 8 个字节。
  - 布尔类型使用 0 表示 `false`, 1 表示 `true`。
- - 对于没有出现在封包里的可缺省数据，计算签名数据时跳过即可。
- - 对于字符串 (action) 的序列方式，依照上文数据定义中在序列化前加入长度前缀进行处理以避免歧义。
+ - 对于没有出现在封包里的可缺省数据（如缺省的 `subject`），计算签名数据时连同其长度前缀一并跳过即可。
+ - 对于所有变长字段（`target`、`action`、`subject`），在序列化前加入 VarInt 长度前缀（即上文的 `len(x)`）以避免拼接歧义；`version`、`time`、`until` 为定长，`SHA3-224(data)` 固定为 28 字节，均不加前缀。
 
 ### 数据校验
 
@@ -60,8 +60,9 @@ ODP 规定，封包可能包含以下字段（字段类型由 [MessagePack Spec]
 3. 所有不可缺省字段均存在
 4. 确定 `issuer` 是已知公钥列表中的一员，即可以根据 `issuer` 关联到对应被授权联邦服务器。
 5. 计算签名数据 `M` 并使用封包中的公钥 `issuer` 检验该签名的合法性。
+6. 检查 `signature` 是否已存在于持久化的「已用签名」记录中。若已存在，说明此封包被重放，拒绝承认其有效性；否则将该 `signature` 记入该记录。
 
-如果有任意一条不满足，拒绝承认其有效性。对于被记录的 `signature` ，记录的销毁时间至少应该在 `until` 之后，且此记录必须能够存活在服务器重启之间存活（持久化）。
+如果第 1–5 条有任意一条不满足，拒绝承认其有效性。ODP 封包为**一次性使用**：实现必须持久化记录所有已通过校验的 `signature`（供第 6 条查重），记录的销毁时间至少应该在 `until` 之后，且此记录必须能够在服务器重启之间存活（持久化）。
 
 ## 实时传递协议
 
@@ -94,11 +95,11 @@ ODP 规定，封包可能包含以下字段（字段类型由 [MessagePack Spec]
 
 #### VarInt 和 VarInt64
 
-VarInt/VarInt64 为可变长(长)整数的缩写。作为 Minecraft 内部使用的一种数据类型，它们类似于 [Protocol Buffer](https://protobuf.dev/programming-guides/encoding/#varints) 中的 Base 128 Varints。本协议中描述的 VarInt 为 Prrotocol Buffer 中的 `int32` / `int64` (for VarInt64) 变种，并非使用 ZigZag 编码的 `sint32` / `sint64`.
+VarInt/VarInt64 为可变长(长)整数的缩写。作为 Minecraft 内部使用的一种数据类型，它们类似于 [Protocol Buffer](https://protobuf.dev/programming-guides/encoding/#varints) 中的 Base 128 Varints。本协议中描述的 VarInt 为 Protocol Buffer 中的 `int32` / `int64` (for VarInt64) 变种，并非使用 ZigZag 编码的 `sint32` / `sint64`.
 
 每个 VarInt 的长度不低于 1 个且不超过 5 个字节，并且 VarInt 使用小端序排列。其每个字节的最高有效位为 1 时表示 VarInt 没有结束，应往后读一个字节。VarInt64 则是长度不低于 1 个，不超过 10 个字节，其他规则与 VarInt 一致。
 
-具体的编码细节可以查看 [Minecrat Wiki 上的对应章节](https://minecraft.wiki/w/Java_Edition_protocol/Packets?oldid=3410741#VarInt_and_VarInt64)
+具体的编码细节可以查看 [Minecraft Wiki 上的对应章节](https://minecraft.wiki/w/Java_Edition_protocol/Packets?oldid=3410741#VarInt_and_VarInt64)
 
 #### ByteArray
 
@@ -146,11 +147,13 @@ https://minecraft.wiki/w/Java_Edition_protocol/Packets?oldid=3410741#VarInt_and_
 
 在双方的临时公钥均已送达后，即可通过 ECDH 计算共享秘密 `S = X25519(k_C/S, K_S/C)` (参见 [RFC 7748 Section 6.1](https://www.rfc-editor.org/rfc/rfc7748.html#section-6.1) )。随后，使用 `S` 计算出最终加密参数：
 
-> PRK = HKDF-Extract(0, shared_secret)  
-> client_AES_key, client_IV = HKDF-Expand(PRK, b"sddp client")  
-> server_AES_key, server_IV = HKDF-Expand(PRK, b"sddp server")  
+> PRK = HKDF-Extract(salt=0, shared_secret)  
+> client_AES_key (32B) || client_IV_prefix (8B) = HKDF-Expand(PRK, b"rdp client", 40)  
+> server_AES_key (32B) || server_IV_prefix (8B) = HKDF-Expand(PRK, b"rdp server", 40)  
 
-HKDF-Extract 和 HKDF-Expand 详见 [RFC 5869 Section 2.2](https://datatracker.ietf.org/doc/html/rfc5869#section-2.2)
+HKDF-Extract 和 HKDF-Expand 详见 [RFC 5869 Section 2.2](https://datatracker.ietf.org/doc/html/rfc5869#section-2.2)。每个方向各导出 40 字节：前 32 字节为 AES-256 密钥，后 8 字节为该方向的 IV 前缀（`IV_prefix`）。
+
+密文封包使用 **AES-256-GCM**，AEAD Tag 固定为 16 字节。每个密文封包的 12 字节 nonce 由「对应方向的 `IV_prefix`（8 字节）」拼接「该封包的包序号（4 字节，大端）」构成，即 `nonce = IV_prefix || seq(Int32, 大端)`。由于包序号逐包递增，nonce 在同一密钥下不会复用。本协议不使用 AAD。
 
 随后，双方可以开始发送密文封包（见下文）。
 
@@ -170,14 +173,14 @@ HKDF-Extract 和 HKDF-Expand 详见 [RFC 5869 Section 2.2](https://datatracker.i
 | -- | -- | -- |
 | Int32 | Prefixed ByteArray | ByteArray |
 
-包序号从 0 开始，每发一个数据包则递增，一直到 `2^31 - 1` 之后回归 1。协议对端应该记录最近一次接收到的合法封包的包序号 `R` 。
+包序号从 0 开始，每发一个数据包则递增 1，取模 `2^31`（即取值范围为 `[0, 2^31 - 1]`，恰好落在非负 `Int32` 内）。协议对端应记录最近一次接收到的合法封包的包序号 `R`，初始值 `R = 2^31 - 1`（使得对端发送的首个合法封包 `N = 0` 能通过下文校验）。为避免 nonce 复用，实现**必须**在包序号接近上限、即将回归 `0` 前通过 `PeerDisconnect (0x05)`（`reason = 1`）重新协商密钥，而非依赖回绕后继续使用旧密钥。
 
 实现者每收到一个密文封包，都应该按以下规则进行检查：
 
-1. 若接收到的封包包序号 `N` 不满足 `N == (R+1) % (2^31 - 1)` 则拒绝封包并断开连接 (`PeerDisconnect (0x05)`)。  
-2. 尝试解密密文 `M`, `M = AES_GCM_Decrypt(AES_key, IV, 密文, AEAD Tag, 包序号)`。若解密或 AEAD 校验失败，则断开连接 (`PeerDisconnect (0x05)`)。
+1. 若接收到的封包包序号 `N` 不满足 `N == (R + 1) mod 2^31` 则拒绝封包并断开连接 (`PeerDisconnect (0x05)`)。  
+2. 由 `nonce = IV_prefix || N(Int32, 大端)` 尝试解密密文 `M`，`M = AES_256_GCM_Decrypt(AES_key, nonce, 密文, AEAD Tag)`。若解密或 AEAD 校验失败，则断开连接 (`PeerDisconnect (0x05)`)。校验通过后将 `R` 更新为 `N`。
 
-其中 `AES_key`, `IV` 的计算方式详见协议流程。RTDP 为了防止 IV 碰撞导出了两套 AES 的参数。因此为了解密来自服务端的流量，客户端应该使用 `server_IV` 和 `server_AES_key`，服务端同理。至于封包的加密方式也不再赘述。
+其中 `AES_key`, `IV_prefix` 的计算方式详见协议流程。RTDP 为了防止 nonce 碰撞导出了两套 AES 参数：为了解密来自服务端的流量，客户端应该使用 `server_IV_prefix` 和 `server_AES_key`，服务端同理。封包的加密为上述过程的逆过程，不再赘述。
 
 #### PeerAuthHello (0x00)
 
@@ -188,7 +191,7 @@ HKDF-Extract 和 HKDF-Expand 详见 [RFC 5869 Section 2.2](https://datatracker.i
 | ByteArray (32) | ByteArray (32) | ByteArray(32) | Int64 | ByteArray (64) |
 | | | | 必须是正整数，否则断开连接 (`PeerDisconnect (0x05)`) |
 
-RTDP 使用 Curve25519 进行密钥协商（ECDH）。因此在发送 PeerAuthHello 前，发送者应该在本地生成 32 位随机字节 (称作: `a`) 作为 x25519 使用的私钥，并通过 [RFC 7748 中提到的方法](https://www.rfc-editor.org/rfc/rfc7748.html#section-5) 计算公钥 `A=X25519(a, 9)`。
+RTDP 使用 Curve25519 进行密钥协商（ECDH）。因此在发送 PeerAuthHello 前，发送者应该在本地生成 32 字节随机数据 (称作: `a`) 作为 x25519 使用的私钥，并通过 [RFC 7748 中提到的方法](https://www.rfc-editor.org/rfc/rfc7748.html#section-5) 计算公钥 `A=X25519(a, 9)`。
 
 `签名` 使用 [RFC 8032 Section 5.1.6](https://www.rfc-editor.org/rfc/rfc8032.html#section-5.1.6) 中描述的签名办法计算，
 
@@ -197,7 +200,9 @@ RTDP 使用 Curve25519 进行密钥协商（ECDH）。因此在发送 PeerAuthHe
 任意一端接收到 `PeerAuthHello` 后，应依据以下办法对签名进行检查：
 
 1. 检查封包中 UNIX 时间的有效性，时间应该在当前主机 UNIX 时间的 +/- 30 秒内（**UNIX 时间标准以秒为基本单位，而非毫秒**）
-2. 按照上文中给出的办法计算签名数据，并使用 [RFC 8032 Section 5.1.7](https://www.rfc-editor.org/rfc/rfc8032.html#section-5.1.7) 中的办法检验该签名确实属于来源提供的 "本地公钥"
+2. 检查封包中的「目标公钥」是否等于接收方自己的公钥。若不相等，说明该握手并非发往本端（可能被中继或反射），拒绝并断开连接。
+3. 检查「本地公钥」是否为已知的联邦服务器公钥（即可将其关联到某个被授权的对端）。若未知则拒绝并断开连接。
+4. 按照上文中给出的办法计算签名数据，并使用 [RFC 8032 Section 5.1.7](https://www.rfc-editor.org/rfc/rfc8032.html#section-5.1.7) 中的办法检验该签名确实属于来源提供的 "本地公钥"
 
 否则拒绝承认封包的有效性并断开连接 (`PeerDisconnect (0x05)`)。
 
@@ -248,7 +253,7 @@ RTDP 使用 Curve25519 进行密钥协商（ECDH）。因此在发送 PeerAuthHe
 
 此包发送后应该立即断开连接。其中，当 `reason` 为 1 时表示重新协商密钥，此时被连接的对端（服务端）需等待客户端重新连接即可。
 
-为了确保安全期间，我们建议实现者在包序号溢出（即恢复到 1 时）重新创建连接。
+为了确保安全，实现**必须**在包序号即将回归 `0`（即接近 `2^31 - 1`）前，通过本包（`reason = 1`）重新协商密钥并重建连接，不得在旧密钥下让包序号回绕后继续发送。
 
 ## RTDP 协议扩展：STARTRTD
 

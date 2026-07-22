@@ -36,6 +36,8 @@ Redirection Token 是基于 ODP 实现的票据。除 ODP 中提到的各项字�
 | cape | bin 32 | ✔ | 玩家的披风数据，_建议_ 长度不应超过 524288 (0.5MB) |
 | extsign | map 16 | ✔ | 指示扩展字段，见下文 |
 
+`PlayerProfile` 本身也使用 MessagePack 编码，其编码后的字节即作为 ODP 封包的 `data` 字段（`bin 32`）填入。因此 ODP 签名数据 `M` 中的 `SHA3-224(data)` 是对「MessagePack 编码后的 `PlayerProfile` 字节」计算的。
+
 考虑到 RT 存放在客户端的 cookie 槽，而 cookie 本身只能储存约 5KiB 的数据。因此，为了减少 RT 本身的大小并且避免不必要的解析开销，实现者可以将体积较大的数据从 RT 中剥离出来，再使用 `extsign` 对他们进行验证。
 
 `extsign` 的 key 为 `str 8`, key 用于表示扩展的 id. value 为 `ExtensionSignature`, 结构如下：
@@ -44,9 +46,11 @@ Redirection Token 是基于 ODP 实现的票据。除 ODP 中提到的各项字�
 | -- | -- | -- | -- |
 | issuer | bin 8 | | 对此扩展数据的担保人 (公钥) |
 | sign | bin 8 | | issuer 对扩展数据的签名 |
-| size | uint 32 | 扩展数据的长度 |
+| size | uint 32 | | 扩展数据的长度 |
 
 考虑扩展数据 D, `issuer` 对应的私钥为 `a`, 则签名算法如下：`S = Sign_a(SHA3-224(D))`
+
+`extsign` 中每一项的 key（扩展 id）必须是一个合法的 [Cookie 信道](#cookies-信道) id（形如 `namespace:value`），并同时用作存放对应扩展数据 `D` 的 Cookie id，实现据此定位并下载 `D`。若将 `PlayerProfile` 中的具名字段（如 `texture`、`cape`）剥离为扩展数据，则约定使用 `pip:texture` / `pip:cape` 作为其扩展 id，且此时 `PlayerProfile` 中对应的具名字段应当缺省，以避免同一份数据出现两处。
 
 ### 校验
 
@@ -79,12 +83,12 @@ Redirection Token 是基于 ODP 实现的票据。除 ODP 中提到的各项字�
  - `CA FE`: 没有后续分段
  - `CA AC`: 有后续分段
 
-所有欲设置的 Cookie 都必须对应一个独一无二的 `id`，id 满足模式 `namespace:value`, 其正则表达式为 `[a-z0-9.-_]+:[a-z0-9._/]+` (注意 `value` 中的减号被预留)。
+所有欲设置的 Cookie 都必须对应一个独一无二的 `id`，id 满足模式 `namespace:value`, 其正则表达式为 `[a-z0-9._-]+:[a-z0-9._/]+` (注意 `value` 中的减号被预留，故 `value` 部分不含 `-`)。
 
 考虑玩家即将携带的 Cookie 数据 `C` 以及其 Id `i`，应该将 `C` 按照如下规律进行封装:
 
-1. 如果 `C` 的总长度小于或等于 5118，则设置魔数为 `CAFE` 并不再对数据做分段处理。
-2. 否则，将数据按长度 5118 进行切割并从 0 开始编号（记作 `i`）。从 i = 1 开始的分段写入名为 `$id-$i` (如: `pip:inventory-1`) 的 Cookie 中，除了最后一项的魔数使用 `CA FE` 其他项均使用 `CA AC`。
+1. 如果 `C` 的总长度小于或等于 5118，则设置魔数为 `CA FE` 并不再对数据做分段处理，直接写入名为 `$id` 的 Cookie。
+2. 否则，将数据按长度 5118 进行切割并从 0 开始编号（记作 `i`）。第 0 段（`i = 0`）写入名为 `$id`（无后缀）的 Cookie，其余从 `i = 1` 开始的分段写入名为 `$id-$i` (如: `pip:inventory-1`) 的 Cookie 中。除了最后一项的魔数使用 `CA FE`，其他项（含 `$id`）均使用 `CA AC`。
 
 切割的最后一项往往长度不足 5118。对于这种情况，实现需要在尾端填充 0 以确保所有分段按 5KiB 对齐。这是为了避免客户端在发送数据时的不确定性从而导致计算签名不一致，以及避免可能存在的拒绝服务攻击。
 
@@ -110,8 +114,8 @@ RT 的签发者可以目标服务器获得回执以确认 RT 被核销/玩家到
  - 目标服务器根据 RT 中规定的来源向来源服务器发起 `RTDP` 连接。
  - 目标服务器发送 `PlayerRedirectionArrived` 表示玩家已经抵达。
  - 目标服务器等待对应的 `PeerAcknowledge (0x04)`, 确定没有错误信息。
- - 目标服务器发送相同事务 Id 的 `PeerAcknowledge (0x04)` 表示已经收到回复，随后放行玩家。
- - 来源服务器若等待不到相同事务 Id 的 `PeerAcknowledge (0x04)` 则放弃冻结数据。
+ - 目标服务器发送相同事务 Id 的 `PlayerRedirectionCommitted` 表示已经收到回复，随后放行玩家。
+ - 来源服务器若等待不到相同事务 Id 的 `PlayerRedirectionCommitted` 则放弃冻结数据。
 
  
 等待不应该超过 30 秒。如果网络连接状况不佳或无法建立 TCP 连接，应至少重试 3 次。
@@ -121,8 +125,8 @@ RT 的签发者可以目标服务器获得回执以确认 RT 被核销/玩家到
 此外，对于需要保证数据一致性的情况，我们建议积极采用冻结而非删除数据的方式来避免状态不同步：
 
 1. 如果玩家在获得 RT 后又进入了源服务器，那么撤销 RT 的有效性（不回答有效 `PeerAcknowledge`)
-2. 在第一次 `PeerAcknowledge` 之后立即冻结玩家的数据，并且禁止加入服务器。
-3. 如果来源服务器未能等待到第二个 `PeerAcknowledge`, 取消冻结数据。
+2. 在回应 `PeerAcknowledge`（无错误）之后立即冻结玩家的数据，并且禁止加入服务器。
+3. 如果来源服务器未能等待到 `PlayerRedirectionCommitted`, 取消冻结数据。
  
 ### 封包参考
 
@@ -133,6 +137,16 @@ RT 的签发者可以目标服务器获得回执以确认 RT 被核销/玩家到
 | action | subject | 事务 ID | 数据 |
 | -- | -- | -- | -- |
 | `arrive` | 目标玩家的 UUID | 一个随机数 | RT 作为 ODP 的 `signature` (64字节) |
+
+#### PlayerRedirectionCommitted
+
+`PlayerRedirectionCommitted` (PRC) 同样基于 `PeerPayload (0x03)` 传递，由目标服务器在收到来源服务器无错误的 `PeerAcknowledge` 后发回，用于告知来源服务器「回执已确认、玩家即将放行」。它与来源服务器发出的 `PeerAcknowledge` 使用**不同的封包类型**，从而避免二者在同一信道、同一事务 ID 下产生歧义。其参数如下：
+
+| action | subject | 事务 ID | 数据 |
+| -- | -- | -- | -- |
+| `commit` | 目标玩家的 UUID | 与对应 `PlayerRedirectionArrived` 相同的事务 ID（用于关联） | 空 |
+
+`PlayerRedirectionCommitted` 是本回执握手的终结消息：尽管其事务 ID 不为 0，来源服务器收到后**不需要**再回应 `PeerAcknowledge`（此处覆盖 [PeerPayload](/INTERCONNECTION.md) 中「事务 ID 不为 0 则必须回应」的通用约定）。
 
 ## 建议
 

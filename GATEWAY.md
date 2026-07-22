@@ -4,7 +4,8 @@
 
 ## 前置条件
 
- - 所有联邦服务器各自持有 32 位的 ed25519 私钥，且所有从此私钥派生的公钥对验证网关均已知。
+ - 所有联邦服务器各自持有 32 字节的 ed25519 私钥，且所有从此私钥派生的公钥对验证网关均已知。
+ - 验证网关自身持有 32 字节的 ed25519 私钥，用于签发 Redirection Token；其对应公钥对所有联邦服务器均已知且受信任（即作为 RT `issuer` 时能通过各服务器的 ODP 校验）。
  - 若要通过档案馆与验证网关交互，联邦服务器需要与档案馆之间有良好的网络连通性。
  
 ## 协议概述
@@ -27,7 +28,7 @@
 
 不符合此 ID 的玩家应该拒绝加入服务器。
 
-3. (Login) 对玩家进行 Ygdrasil 验证
+3. (Login) 对玩家进行 Yggdrasil 验证
 
 首先，并非所有尝试加入的 Minecraft 玩家都需要被 Yggdrasil 验证。通常。离线玩家的 UUID 总是内容为 `MD5("OfflinePlayer:"+name)` 的 3 型 UUID, 其中 `name` 是玩家的 ID。对于被提前辨别出的离线玩家，我们 _建议_ 实现者将他们 Transfer 到专用的游戏内账户密码登录服务器以进行身份验证。
 
@@ -49,7 +50,7 @@ Yggdrasil 验证允许验证网关使用多个 Yggdrasil 后端。但请注意�
 
 ### 转发
 
-MFP 的分布式特性允许玩家在服务器之间自由移动而不需要中央服务器。然而，对于某些需要保证状态一致的情景，玩家加入一个 "意料之外的" 服务器 (比如: 携带物品 redirect 出发时的服务器) 是不可接受的。因此，MFP 提供了两种方案：转发 和 服务器之间自行实现追踪。
+MCFP 的分布式特性允许玩家在服务器之间自由移动而不需要中央服务器。然而，对于某些需要保证状态一致的情景，玩家加入一个 "意料之外的" 服务器 (比如: 携带物品 redirect 出发时的服务器) 是不可接受的。因此，MCFP 提供了两种方案：转发 和 服务器之间自行实现追踪。
 
 此小节即为 "转发"。在玩家由来源服务器前往目标服务器前，会经过验证网关以记录状态。
 
@@ -75,7 +76,7 @@ MFP 的分布式特性允许玩家在服务器之间自由移动而不需要中�
 
 关于档案馆，详见 [档案馆](#档案馆)
 
-玩家网关档案使用命名空间 `mfp:gateway_profile`。其档案内数据定义如下：
+玩家网关档案使用命名空间 `mcfp:gateway_profile`。其档案内数据定义如下：
 
 | 名称 | 类型 | 是否可缺省 | 含义 |
 | -- | -- | -- | -- |
@@ -90,17 +91,17 @@ MFP 的分布式特性允许玩家在服务器之间自由移动而不需要中�
 
 需要注意的是，安全连接 协议仅支持 Minecraft 1.20.5 以及更新的版本。
 
-### 对安全网关的修改
+### 对验证网关的修改
 
 为了支持客户端对服务器公钥的验证，验证网关借助 Yggdrasil 作为权威验证与客户端连接的有效性，并发送联邦中所有服务器的公钥。
 
 > [!IMPORTANT]
 > 
-> 一旦安全网关发送公钥，客户端 Mod 将总是检验 Transfer 过程中连接的服务器的公钥。因此，在使用前需要确保联邦中的所有服务器均已支持 「安全连接」 协议。
+> 一旦验证网关发送公钥，客户端 Mod 将总是检验 Transfer 过程中连接的服务器的公钥。因此，在使用前需要确保联邦中的所有服务器均已支持 「安全连接」 协议。
 
 1. (Configuration) 对玩家发送所有已知联邦服务器的公钥
 
-此步骤通过 [Clientbound Plugin Message (Configuration)](https://minecraft.wiki/w/Java_Edition_protocol/Packets#Clientbound_Plugin_Message_(configuration)) 实现。其中，我们使用 `mfp:gateway_server_keys` 作为 Channel。其 Payload 为一个长度可被 32 整除的字节数组，解析方式如下：
+此步骤通过 [Clientbound Plugin Message (Configuration)](https://minecraft.wiki/w/Java_Edition_protocol/Packets#Clientbound_Plugin_Message_(configuration)) 实现。其中，我们使用 `mcfp:gateway_server_keys` 作为 Channel。其 Payload 为一个长度可被 32 整除的字节数组，解析方式如下：
 
 ```python
 size = 32
@@ -108,7 +109,7 @@ size = 32
 def get_keys(raw_payload: bytes) -> list[bytes]:
     l = len(raw_payload)
     n = l % size
-    if l == 0 or l - (n*size) != 0:
+    if l == 0 or l % size != 0:
         return [] 
     return [raw_payload[i:i+size] for i in range(0, l, size)]
 ```
@@ -137,11 +138,12 @@ Encryption Request 的结构如下：
 | Int32 | Byte Array (32) | Prefixed ByteArray |
 | 固定为 `18108736` | 连接目标联邦服务器的公钥 | 联邦服务器私钥对 `sk1` 的签名数据 |
 
-2. 如果客户端 Mod 没有在经过验证网关时收到 `mfp:gateway_server_keys`, 则就此结束。
+2. 如果客户端 Mod 没有在经过验证网关时收到 `mcfp:gateway_server_keys`, 则就此结束。
 
 否则，按照以下步骤严格检验所有收到的 Encryption Request, 并且拒绝在没有 Encryption Request 的情况下直接进入下一阶段（Configuration）：
  - 检查 `Verify Token` 中的魔数是否正确，否则断开连接。
- - 寻找 `mfp:gateway_server_keys` 中是否有匹配该签名的公钥，否则断开连接。
+ - 使用 `Verify Token` 中携带的「联邦服务器公钥」按 [RFC 8032 Section 5.1.7](https://www.rfc-editor.org/rfc/rfc8032.html#section-5.1.7) 验证「签名数据」确为对本次 `Encryption Request` 中 `Public Key`（`sk1`）的签名，否则断开连接。
+ - 确认该「联邦服务器公钥」确实存在于此前收到的 `mcfp:gateway_server_keys` 列表中（即连接到的是联邦成员），否则断开连接。
  - 继续进行协议流程。
 
 ## 档案馆
@@ -210,7 +212,7 @@ API 响应状态码：
 | uuid | 玩家的 UUID |
 | namespace | 对应的命名空间 ID |
 
-命名空间满足此正则表达式：`[a-z0-9.-_]+:[a-z0-9._/]+`
+命名空间满足此正则表达式：`[a-z0-9._-]+:[a-z0-9._/]+`
 
 UUID 的格式同上。
 
@@ -227,17 +229,19 @@ UUID 的格式同上。
 | Content-Type | 固定为 `application/json; charset=utf-8`, 服务端也需要遵循此约定 |
 | Last-Modified | 对应档案上次修改时间 |
 
-响应体直接返回来自上一个服务器设置的 JSON 数据。示例：
+响应体与 [`GET /api/player/:uuid`](#get-apiplayeruuid) 中的单个记录对格式一致，即返回该命名空间的 `data`、`signature`、`modified_at` 三元组，以便调用方在单独拉取某一命名空间时也能验证签名。示例：
 
 ```json5
 {
-    // ... ?
+    "data": ".......",
+    "signature": "......",
+    "modified_at": 0
 }
 ```
 
 尽管任意符合上述正则表达式的字符串都是合法的命名空间，但我们仍建议联邦服务器在使用档案馆服务时，遵循以下规范（命名空间规范）：
 
-1. 命名空间应由两部分组成（`part1:part2`），我们建议 part1 使用关联于联邦服务器的唯一标识，并且避免使用保留命名空间 `federation` 。
+1. 命名空间应由两部分组成（`part1:part2`），我们建议 part1 使用关联于联邦服务器的唯一标识，并且避免使用保留命名空间 `federation` 与 `mcfp` 。
 2. 使用人类可读的名称。若名称由程序生成，请添加必要的前缀或后缀以供识别。
 
 API 响应状态码：
@@ -275,13 +279,15 @@ UUID 与命名空间的约束如上。
 import time
 from base64 import b64encode
 
-def calc_sign(privateKey, publicKey, data) -> str:
+def calc_sign(privateKey, publicKey, data: bytes) -> str:
     now = int(time.time())
-    sub_sign = b64encode(ed25519_sign(bytes(now) + data))
-    return f"{now}-${sub_sign}-${b64encode(publicKey)}"
+    # now 以 8 字节大端序编码后与 data 拼接再签名
+    message = now.to_bytes(8, "big") + data
+    sub_sign = b64encode(ed25519_sign(privateKey, message)).decode()
+    return f"{now}-{sub_sign}-{b64encode(publicKey).decode()}"
 ```
 
-其中 `ed25519_sign` 是 [RFC 8032 Section 5.1.6](https://www.rfc-editor.org/rfc/rfc8032.html#section-5.1.6) 中描述的签名方法。
+其中 `ed25519_sign(privateKey, message)` 是 [RFC 8032 Section 5.1.6](https://www.rfc-editor.org/rfc/rfc8032.html#section-5.1.6) 中描述的签名方法，被签名的 `message` 为 `now`（8 字节大端）与请求体原始字节 `data` 的拼接。`X-Signature` 由三段以 `-` 连接构成：`now` 的十进制文本、签名的 Base64、发布者公钥的 Base64（标准 Base64 字母表不含 `-`，故不产生歧义）。校验方须用第一段的 `now` 重建被签名的 `message` 并用第三段的公钥验签，同时应校验 `now` 与当前时间的偏差以防重放。
 
 请求 Body:
 
