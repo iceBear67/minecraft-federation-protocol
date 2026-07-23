@@ -52,6 +52,8 @@ Redirection Token 是基于 ODP 实现的票据。除 ODP 中提到的各项字�
 
 `extsign` 中每一项的 key（扩展 id）必须是一个合法的 [Cookie 信道](#cookies-信道) id（形如 `namespace:value`），并同时用作存放对应扩展数据 `D` 的 Cookie id，实现据此定位并下载 `D`。若将 `PlayerProfile` 中的具名字段（如 `texture`、`cape`）剥离为扩展数据，则约定使用 `pip:texture` / `pip:cape` 作为其扩展 id，且此时 `PlayerProfile` 中对应的具名字段应当缺省，以避免同一份数据出现两处。
 
+RT 在借助 Cookie 信道用于服务器间传送时，固定使用 ID `pip:redirect`
+
 ### 校验
 
 实现在使用 RT 之前，应按照以下步骤对 RT 进行检查：
