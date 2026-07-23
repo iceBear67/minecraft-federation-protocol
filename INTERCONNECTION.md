@@ -192,10 +192,10 @@ HKDF-Extract 和 HKDF-Expand 详见 [RFC 5869 Section 2.2](https://datatracker.i
 
 此封包设计用于实时传递协议，且必须依照明文封包格式封装。
 
-| 本地公钥 | 目标公钥 | 本地临时公钥 | 当前 UNIX 时间 | 签名 |
-| - | - | - | - | - |
-| ByteArray (32) | ByteArray (32) | ByteArray(32) | Int64 | ByteArray (64) |
-| | | | 必须是正整数，否则断开连接 (`PeerDisconnect (0x05)`) |
+| 魔数 | 本地公钥 | 目标公钥 | 本地临时公钥 | 当前 UNIX 时间 | 签名 |
+| - | - | - | - | - | - |
+| ByteArray(3) | ByteArray (32) | ByteArray (32) | ByteArray(32) | Int64 | ByteArray (64) |
+| 固定为 `[109, 102, 112]` | | | | 必须是正整数，否则断开连接 (`PeerDisconnect (0x05)`) |
 
 RTDP 使用 Curve25519 进行密钥协商（ECDH）。因此在发送 PeerAuthHello 前，发送者应该在本地生成 32 字节随机数据 (称作: `a`) 作为 x25519 使用的私钥，并通过 [RFC 7748 中提到的方法](https://www.rfc-editor.org/rfc/rfc7748.html#section-5) 计算公钥 `A=X25519(a, 9)`。
 
